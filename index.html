@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<title>CRM Integration - Gantt Chart</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f5f6fa; color: #333; padding: 20px; }
+  h1 { font-size: 22px; color: #2F5496; margin-bottom: 5px; }
+  .subtitle { font-size: 13px; color: #666; margin-bottom: 20px; }
+  
+  .summary { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+  .summary-card { background: #fff; border-radius: 8px; padding: 14px 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); min-width: 160px; }
+  .summary-card .label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+  .summary-card .value { font-size: 20px; font-weight: 700; color: #2F5496; margin-top: 2px; }
+  .summary-card .value.green { color: #4CAF50; }
+  .summary-card .value.orange { color: #FF9800; }
+  
+  .controls { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+  .controls label { font-size: 12px; color: #666; }
+  .controls select, .controls input { padding: 5px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; }
+  .btn { padding: 5px 14px; border: 1px solid #2F5496; background: #fff; color: #2F5496; border-radius: 4px; cursor: pointer; font-size: 12px; }
+  .btn.active { background: #2F5496; color: #fff; }
+  
+  .legend { display: flex; gap: 16px; margin-bottom: 12px; font-size: 11px; align-items: center; }
+  .legend-item { display: flex; align-items: center; gap: 4px; }
+  .legend-swatch { width: 16px; height: 10px; border-radius: 2px; }
+  
+  .gantt-container { overflow-x: auto; background: #fff; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+  
+  table { border-collapse: collapse; width: max-content; min-width: 100%; }
+  thead th { position: sticky; top: 0; z-index: 10; background: #2F5496; color: #fff; font-size: 10px; font-weight: 600; padding: 6px 4px; text-align: center; white-space: nowrap; }
+  thead th.task-col { text-align: left; min-width: 50px; }
+  thead th.activity-col { text-align: left; min-width: 260px; }
+  thead th.month-header { background: #1a3a7a; font-size: 11px; letter-spacing: 0.5px; }
+  thead th.week-header { background: #2F5496; font-size: 9px; }
+  
+  tbody tr { transition: background 0.15s; }
+  tbody tr:hover { background: #f0f4ff !important; }
+  tbody tr.phase-separator td { border-top: 2px solid #2F5496; }
+  
+  td { padding: 4px 5px; font-size: 11px; border-bottom: 1px solid #eee; white-space: nowrap; vertical-align: middle; }
+  td.id-cell { font-weight: 700; color: #2F5496; text-align: center; }
+  td.role-cell { text-align: center; font-weight: 600; }
+  td.role-cell.ana { color: #2F5496; background: #e8eff8; }
+  td.role-cell.be { color: #548235; background: #eef5e6; }
+  td.activity-cell { white-space: normal; word-break: break-word; max-width: 300px; font-size: 10px; }
+  td.dur-cell { text-align: center; color: #888; font-size: 10px; }
+  
+  td.gantt-cell { padding: 2px 0; position: relative; min-width: 22px; border-left: 1px solid #f0f0f0; }
+  td.gantt-cell.weekend { background: #fafafa; }
+  
+  .bar { height: 14px; border-radius: 2px; position: absolute; top: 50%; transform: translateY(-50%); min-width: 3px; }
+  .bar.opt { background: #4472C4; opacity: 0.9; z-index: 2; }
+  .bar.pes { background: #A9D18E; opacity: 0.7; z-index: 1; }
+  
+  .tooltip { display: none; position: fixed; background: #333; color: #fff; padding: 8px 12px; border-radius: 6px; font-size: 11px; z-index: 100; pointer-events: none; max-width: 350px; line-height: 1.5; }
+  
+  @media print { body { padding: 5px; } .controls, .btn { display: none; } }
+</style>
+</head>
+<body>
+
+<h1>Customer 360 CRM Integration — Project Gantt</h1>
+<div class="subtitle">DrMax GDP · ANACRM + GRPDWH → RAW → BASE · 2 ANA + 2 BE</div>
+
+<div class="summary" id="summaryCards"></div>
+
+<div class="controls">
+  <label>Filter role:</label>
+  <button class="btn active" data-filter="all">All</button>
+  <button class="btn" data-filter="ANA">ANA</button>
+  <button class="btn" data-filter="BE">BE</button>
+  <span style="margin-left:12px"></span>
+  <label>Filter layer:</label>
+  <button class="btn active" data-layer="all">All</button>
+  <button class="btn" data-layer="RAW">RAW</button>
+  <button class="btn" data-layer="BASE">BASE</button>
+  <span style="margin-left:12px"></span>
+  <label>Filter source:</label>
+  <button class="btn active" data-source="all">All</button>
+  <button class="btn" data-source="ANACRM">ANACRM</button>
+  <button class="btn" data-source="GRPDWH">GRPDWH</button>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-swatch" style="background:#4472C4"></div> Optimistic</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#A9D18E"></div> Pessimistic extension</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#e8eff8;border:1px solid #ccc"></div> ANA</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#eef5e6;border:1px solid #ccc"></div> BE</div>
+</div>
+
+<div class="gantt-container">
+  <table id="ganttTable"><thead></thead><tbody></tbody></table>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+const DATA = [{"id": "2a", "role": "ANA", "env": "NA", "layer": "RAW", "source": "ANACRM", "activity": "RAW: Interface agreement for alltogether 26 objects (or more according POS/RMS requirements) link to list of objects:LIN", "deps": "-", "opt_effort": 10.0, "pes_effort": 12.0, "opt_duration": 15, "pes_duration": 15, "opt_start": "2026-03-25", "opt_end": "2026-04-15", "pes_start": "2026-03-25", "pes_end": "2026-04-15", "uses_both": true, "halved": false}, {"id": "2b", "role": "BE", "env": "NA", "layer": "RAW", "source": "ANACRM", "activity": "RAW: Interface agreement for alltogether 26 objects (or more according POS/RMS requirements) link to list of objects:LIN", "deps": "-", "opt_effort": 6.0, "pes_effort": 10.0, "opt_duration": 15, "pes_duration": 15, "opt_start": "2026-03-25", "opt_end": "2026-04-15", "pes_start": "2026-03-25", "pes_end": "2026-04-15", "uses_both": true, "halved": false}, {"id": "3a", "role": "ANA", "env": "NA", "layer": "RAW", "source": "GRPDWH", "activity": "RAW: Interface agreement for alltogether 6 objects link to list of objects:LINK", "deps": "-", "opt_effort": 3.0, "pes_effort": 6.0, "opt_duration": 15, "pes_duration": 15, "opt_start": "2026-03-25", "opt_end": "2026-04-15", "pes_start": "2026-03-25", "pes_end": "2026-04-15", "uses_both": true, "halved": false}, {"id": "3b", "role": "BE", "env": "NA", "layer": "RAW", "source": "GRPDWH", "activity": "RAW: Interface agreement for alltogether 6 objects link to list of objects:LINK", "deps": "-", "opt_effort": 3.0, "pes_effort": 6.0, "opt_duration": 15, "pes_duration": 15, "opt_start": "2026-03-25", "opt_end": "2026-04-15", "pes_start": "2026-03-25", "pes_end": "2026-04-15", "uses_both": true, "halved": false}, {"id": "4", "role": "BE", "env": "NA", "layer": "RAW", "source": "ANACRM", "activity": "RAW: Create a ticket for CRM container Storage account (DEV/TEST/PROD)  Catalog - schema (XNA CRM) => DEV, TEST, PROD + ", "deps": "2b, 2a", "opt_effort": 1.0, "pes_effort": 2.0, "opt_duration": 1, "pes_duration": 2, "opt_start": "2026-04-15", "opt_end": "2026-04-16", "pes_start": "2026-04-15", "pes_end": "2026-04-17", "uses_both": false, "halved": false}, {"id": "5", "role": "BE", "env": "NA", "layer": "RAW", "source": "GRPDWH", "activity": "RAW: Create a ticket for GRP DWH container Storage account (DEV/TEST/PROD) Catalog - schema (XNA GRP DWH) => DEV, TEST, ", "deps": "3a, 3b", "opt_effort": 1.0, "pes_effort": 1.0, "opt_duration": 1, "pes_duration": 1, "opt_start": "2026-04-15", "opt_end": "2026-04-16", "pes_start": "2026-04-15", "pes_end": "2026-04-16", "uses_both": false, "halved": false}, {"id": "6", "role": "BE", "env": "DEV", "layer": "RAW", "source": "ANACRM", "activity": "RAW: Standard CRM incremental insert into DEV PUBLIC lake (per country tenant) + file export validation Agreed some data", "deps": "4", "opt_effort": 2.0, "pes_effort": 2.0, "opt_duration": 2, "pes_duration": 2, "opt_start": "2026-04-16", "opt_end": "2026-04-20", "pes_start": "2026-04-17", "pes_end": "2026-04-21", "uses_both": false, "halved": false}, {"id": "7", "role": "BE", "env": "DEV", "layer": "RAW", "source": "GRPDWH", "activity": "RAW:  GRP DWH initial insert into DEV PUBLIC lake (per country tenant) + file export validation", "deps": "5", "opt_effort": 3.0, "pes_effort": 3.0, "opt_duration": 3, "pes_duration": 3, "opt_start": "2026-04-16", "opt_end": "2026-04-21", "pes_start": "2026-04-17", "pes_end": "2026-04-22", "uses_both": false, "halved": false}, {"id": "8", "role": "BE", "env": "DEV", "layer": "RAW", "source": "ANACRM", "activity": "RAW: ADF - pipeline lake PUBLIC-> Dbx RAW", "deps": "6", "opt_effort": 5.0, "pes_effort": 15.0, "opt_duration": 3, "pes_duration": 8, "opt_start": "2026-04-21", "opt_end": "2026-04-24", "pes_start": "2026-04-22", "pes_end": "2026-05-04", "uses_both": true, "halved": true}, {"id": "9", "role": "BE", "env": "DEV", "layer": "RAW", "source": "GRPDWH", "activity": "RAW: ADF - pipeline lake PUBLIC-> Dbx RAW", "deps": "7", "opt_effort": 2.0, "pes_effort": 5.0, "opt_duration": 1, "pes_duration": 3, "opt_start": "2026-04-24", "opt_end": "2026-04-27", "pes_start": "2026-05-04", "pes_end": "2026-05-07", "uses_both": true, "halved": true}, {"id": "10", "role": "BE", "env": "DEV", "layer": "RAW", "source": "ANACRM", "activity": "RAW: Dafne orchestration (ADF pipelines into RAW ) per TENANT(COUNTRY) + technical testing/validation", "deps": "8", "opt_effort": 4.0, "pes_effort": 6.0, "opt_duration": 2, "pes_duration": 3, "opt_start": "2026-04-27", "opt_end": "2026-04-29", "pes_start": "2026-05-07", "pes_end": "2026-05-12", "uses_both": true, "halved": true}, {"id": "11", "role": "BE", "env": "DEV", "layer": "RAW", "source": "GRPDWH", "activity": "RAW: Dafne orchestration (ADF pipelines into RAW ) per TENANT(COUNTRY) + technical testing/validation", "deps": "9", "opt_effort": 2.0, "pes_effort": 4.0, "opt_duration": 1, "pes_duration": 2, "opt_start": "2026-04-29", "opt_end": "2026-04-30", "pes_start": "2026-05-12", "pes_end": "2026-05-14", "uses_both": true, "halved": true}, {"id": "12", "role": "BE", "env": "DEV", "layer": "RAW", "source": "ANACRM", "activity": "RAW: Validation of Dbx DEV data per TENANT(COUNTRY) -  technical", "deps": "10", "opt_effort": 2.0, "pes_effort": 2.0, "opt_duration": 1, "pes_duration": 1, "opt_start": "2026-04-30", "opt_end": "2026-05-01", "pes_start": "2026-05-14", "pes_end": "2026-05-15", "uses_both": true, "halved": true}, {"id": "13", "role": "BE", "env": "DEV", "layer": "RAW", "source": "GRPDWH", "activity": "RAW: Validation of Dbx DEV data per TENANT(COUNTRY) -  technical", "deps": "11", "opt_effort": 1.0, "pes_effort": 1.0, "opt_duration": 1, "pes_duration": 1, "opt_start": "2026-05-01", "opt_end": "2026-05-04", "pes_start": "2026-05-15", "pes_end": "2026-05-18", "uses_both": true, "halved": true}, {"id": "14", "role": "BE", "env": "DEV", "layer": "RAW", "source": "ANACRM", "activity": "RAW: Import to Metacroc - Creation of objects in RAW MC", "deps": "2b, 8, 2a", "opt_effort": 1.0, "pes_effort": 1.0, "opt_duration": 1, "pes_duration": 1, "opt_start": "2026-05-04", "opt_end": "2026-05-05", "pes_start": "2026-05-18", "pes_end": "2026-05-19", "uses_both": false, "halved": false}, {"id": "15", "role": "BE", "env": "DEV", "layer": "RAW", "source": "GRPDWH", "activity": "RAW: Import to Metacroc - Creation of objects in RAW MC", "deps": "9, 3a, 3b", "opt_effort": 1.0, "pes_effort": 1.0, "opt_duration": 1, "pes_duration": 1, "opt_start": "2026-05-04", "opt_end": "2026-05-05", "pes_start": "2026-05-18", "pes_end": "2026-05-19", "uses_both": false, "halved": false}, {"id": "16", "role": "ANA", "env": "NA", "layer": "RAW", "source": "ANACRM", "activity": "RAW: Metacroc descriptions of RAW objects on table and column level", "deps": "14", "opt_effort": 0.0, "pes_effort": 3.0, "opt_duration": 1, "pes_duration": 3, "opt_start": "2026-05-05", "opt_end": "2026-05-06", "pes_start": "2026-05-19", "pes_end": "2026-05-22", "uses_both": false, "halved": false}, {"id": "17", "role": "ANA", "env": "NA", "layer": "RAW", "source": "GRPDWH", "activity": "RAW: Metacroc descriptions of RAW objects on table and column level", "deps": "15", "opt_effort": 0.0, "pes_effort": 2.0, "opt_duration": 1, "pes_duration": 2, "opt_start": "2026-05-05", "opt_end": "2026-05-06", "pes_start": "2026-05-19", "pes_end": "2026-05-21", "uses_both": false, "halved": false}, {"id": "18", "role": "BE", "env": "TEST", "layer": "RAW", "source": "ANACRM", "activity": "RAW: Send data from TEST CRM to TEST GDP", "deps": "12", "opt_effort": 1.0, "pes_effort": 2.0, "opt_duration": 1, "pes_duration": 2, "opt_start": "2026-05-05", "opt_end": "2026-05-06", "pes_start": "2026-05-19", "pes_end": "2026-05-21", "uses_both": false, "halved": false}, {"id": "19", "role": "BE", "env": "TEST", "layer": "RAW", "source": "GRPDWH", "activity": "RAW: Send data from PROD GRP to TEST GDP", "deps": "13", "opt_effort": 2.0, "pes_effort": 2.0, "opt_duration": 2, "pes_duration": 2, "opt_start": "2026-05-05", "opt_end": "2026-05-07", "pes_start": "2026-05-19", "pes_end": "2026-05-21", "uses_both": false, "halved": false}, {"id": "20", "role": "ANA", "env": "TEST", "layer": "RAW", "source": "ANACRM", "activity": "RAW: DBx TEST data testing and validation", "deps": "12", "opt_effort": 3.0, "pes_effort": 6.0, "opt_duration": 2, "pes_duration": 3, "opt_start": "2026-05-06", "opt_end": "2026-05-08", "pes_start": "2026-05-22", "pes_end": "2026-05-27", "uses_both": true, "halved": true}, {"id": "21", "role": "ANA", "env": "TEST", "layer": "RAW", "source": "GRPDWH", "activity": "RAW: DBx TEST data testing and validation", "deps": "13", "opt_effort": 1.0, "pes_effort": 3.0, "opt_duration": 1, "pes_duration": 2, "opt_start": "2026-05-08", "opt_end": "2026-05-11", "pes_start": "2026-05-27", "pes_end": "2026-05-29", "uses_both": true, "halved": true}, {"id": "22", "role": "BE", "env": "PROD", "layer": "RAW", "source": "ANACRM", "activity": "RAW: PREPROD - PROD Release", "deps": "18, 20", "opt_effort": 2.0, "pes_effort": 2.0, "opt_duration": 2, "pes_duration": 2, "opt_start": "2026-05-08", "opt_end": "2026-05-12", "pes_start": "2026-05-27", "pes_end": "2026-05-29", "uses_both": false, "halved": false}, {"id": "23", "role": "BE", "env": "PROD", "layer": "RAW", "source": "GRPDWH", "activity": "RAW: PREPROD - PROD Release", "deps": "21, 19", "opt_effort": 2.0, "pes_effort": 2.0, "opt_duration": 2, "pes_duration": 2, "opt_start": "2026-05-11", "opt_end": "2026-05-13", "pes_start": "2026-05-29", "pes_end": "2026-06-02", "uses_both": false, "halved": false}, {"id": "24", "role": "ANA", "env": "PROD", "layer": "RAW", "source": "ANACRM", "activity": "RAW: DBx PROD data validation (per each country specifics)", "deps": "22, 23", "opt_effort": 2.0, "pes_effort": 4.0, "opt_duration": 1, "pes_duration": 2, "opt_start": "2026-05-13", "opt_end": "2026-05-14", "pes_start": "2026-06-02", "pes_end": "2026-06-04", "uses_both": true, "halved": true}, {"id": "25", "role": "ANA", "env": "PROD", "layer": "RAW", "source": "GRPDWH", "activity": "RAW: DBx PROD data validation (per each country specifics)", "deps": "22, 23", "opt_effort": 1.0, "pes_effort": 2.0, "opt_duration": 1, "pes_duration": 1, "opt_start": "2026-05-14", "opt_end": "2026-05-15", "pes_start": "2026-06-04", "pes_end": "2026-06-05", "uses_both": true, "halved": true}, {"id": "26", "role": "ANA", "env": "NA", "layer": "BASE", "source": "ANACRM", "activity": "BASE: QG for Glossary terms - based only on CRM data", "deps": "20", "opt_effort": 0.0, "pes_effort": 3.0, "opt_duration": 1, "pes_duration": 3, "opt_start": "2026-05-15", "opt_end": "2026-05-18", "pes_start": "2026-06-05", "pes_end": "2026-06-10", "uses_both": false, "halved": false}, {"id": "28", "role": "ANA", "env": "NA", "layer": "BASE", "source": "ANACRM", "activity": "BASE: Logical model impact analysis & redesign proposal", "deps": "12, 13", "opt_effort": 26.0, "pes_effort": 40.0, "opt_duration": 19, "pes_duration": 28, "opt_start": "2026-05-18", "opt_end": "2026-06-12", "pes_start": "2026-06-10", "pes_end": "2026-07-20", "uses_both": true, "halved": false}, {"id": "30", "role": "ANA", "env": "NA", "layer": "BASE", "source": "ANACRM", "activity": "BASE: Physical model changes and metacroc mappings RAW->BASE", "deps": "28, 46", "opt_effort": 30.0, "pes_effort": 35.0, "opt_duration": 15, "pes_duration": 18, "opt_start": "2026-06-17", "opt_end": "2026-07-08", "pes_start": "2026-07-27", "pes_end": "2026-08-20", "uses_both": true, "halved": true}, {"id": "31", "role": "ANA", "env": "NA", "layer": "BASE", "source": "GRPDWH", "activity": "BASE: Physical model changes and metacroc mappings RAW->BASE", "deps": "28, 46", "opt_effort": 15.0, "pes_effort": 20.0, "opt_duration": 8, "pes_duration": 10, "opt_start": "2026-07-08", "opt_end": "2026-07-20", "pes_start": "2026-08-20", "pes_end": "2026-09-03", "uses_both": true, "halved": true}, {"id": "32", "role": "BE", "env": "NA", "layer": "BASE", "source": "ANACRM", "activity": "BASE: Create/update data objects (tables) in Metacroc according to LDM (Lucid)", "deps": "30", "opt_effort": 4.0, "pes_effort": 5.0, "opt_duration": 4, "pes_duration": 5, "opt_start": "2026-07-08", "opt_end": "2026-07-14", "pes_start": "2026-08-20", "pes_end": "2026-08-27", "uses_both": false, "halved": false}, {"id": "34", "role": "BE", "env": "DEV", "layer": "BASE", "source": "ANACRM", "activity": "BASE: Generate/update BASE DBX tables based on BASE Metacroc tables", "deps": "32", "opt_effort": 5.0, "pes_effort": 5.0, "opt_duration": 5, "pes_duration": 5, "opt_start": "2026-07-14", "opt_end": "2026-07-21", "pes_start": "2026-08-27", "pes_end": "2026-09-03", "uses_both": false, "halved": false}, {"id": "36", "role": "BE", "env": "DEV", "layer": "BASE", "source": "ANACRM", "activity": "BASE: Create Metacroc mappings (RAW-BASE)", "deps": "34", "opt_effort": 25.0, "pes_effort": 35.0, "opt_duration": 13, "pes_duration": 18, "opt_start": "2026-07-21", "opt_end": "2026-08-07", "pes_start": "2026-09-03", "pes_end": "2026-09-29", "uses_both": true, "halved": true}, {"id": "37", "role": "BE", "env": "DEV", "layer": "BASE", "source": "ANACRM", "activity": "BASE: Release Metacroc mapping scripts to DBX and execute them (", "deps": "36", "opt_effort": 20.0, "pes_effort": 25.0, "opt_duration": 10, "pes_duration": 13, "opt_start": "2026-08-07", "opt_end": "2026-08-21", "pes_start": "2026-09-29", "pes_end": "2026-10-16", "uses_both": true, "halved": true}, {"id": "38", "role": "BE", "env": "DEV", "layer": "BASE", "source": "GRPDWH", "activity": "GRP DWH BASE: Historized data from Synapse (CRM doesn\u00b4t have this history) - create init mapping (20 existing, 11 potenc", "deps": "37", "opt_effort": 12.0, "pes_effort": 17.0, "opt_duration": 6, "pes_duration": 9, "opt_start": "2026-08-21", "opt_end": "2026-08-31", "pes_start": "2026-10-16", "pes_end": "2026-10-29", "uses_both": true, "halved": true}, {"id": "39", "role": "BE", "env": "DEV", "layer": "BASE", "source": "GRPDWH", "activity": "GRP DWH BASE: Historized data from Synapse (CRM doesn\u00b4t have this history) - insert into _h (history) table (20-30 mappi", "deps": "38", "opt_effort": 8.0, "pes_effort": 12.0, "opt_duration": 4, "pes_duration": 6, "opt_start": "2026-08-31", "opt_end": "2026-09-04", "pes_start": "2026-10-29", "pes_end": "2026-11-06", "uses_both": true, "halved": true}, {"id": "40", "role": "ANA", "env": "DEV", "layer": "BASE", "source": "ANACRM", "activity": "BASE: DEV data set validation per TENANT(COUNTRY)", "deps": "39, 37", "opt_effort": 7.0, "pes_effort": 10.0, "opt_duration": 4, "pes_duration": 5, "opt_start": "2026-09-04", "opt_end": "2026-09-10", "pes_start": "2026-11-06", "pes_end": "2026-11-13", "uses_both": true, "halved": true}, {"id": "41", "role": "ANA", "env": "DEV", "layer": "BASE", "source": "GRPDWH", "activity": "BASE: DEV data set validation per TENANT(COUNTRY)", "deps": "39, 37", "opt_effort": 3.0, "pes_effort": 5.0, "opt_duration": 2, "pes_duration": 3, "opt_start": "2026-09-10", "opt_end": "2026-09-14", "pes_start": "2026-11-13", "pes_end": "2026-11-18", "uses_both": true, "halved": true}, {"id": "42", "role": "BE", "env": "DEV", "layer": "BASE", "source": "ANACRM", "activity": "BASE: Dafne orchestrations of DBX Jobs (Mapping scripts)", "deps": "36", "opt_effort": 5.0, "pes_effort": 5.0, "opt_duration": 5, "pes_duration": 5, "opt_start": "2026-09-04", "opt_end": "2026-09-11", "pes_start": "2026-11-06", "pes_end": "2026-11-13", "uses_both": false, "halved": false}, {"id": "43", "role": "BE", "env": "DEV", "layer": "BASE", "source": "GRPDWH", "activity": "BASE: Dafne orchestrations of DBX Jobs (Mapping scripts)", "deps": "41, 40", "opt_effort": 3.0, "pes_effort": 3.0, "opt_duration": 3, "pes_duration": 3, "opt_start": "2026-09-14", "opt_end": "2026-09-17", "pes_start": "2026-11-18", "pes_end": "2026-11-23", "uses_both": false, "halved": false}, {"id": "44", "role": "BE", "env": "DEV", "layer": "BASE", "source": "GRPDWH", "activity": "BASE: Initial insert of historic CRM Data set per TENANT(COUNTRY)", "deps": "38", "opt_effort": 5.0, "pes_effort": 5.0, "opt_duration": 5, "pes_duration": 5, "opt_start": "2026-09-11", "opt_end": "2026-09-18", "pes_start": "2026-11-13", "pes_end": "2026-11-20", "uses_both": false, "halved": false}, {"id": "45", "role": "ANA", "env": "NA", "layer": "BASE", "source": "ANACRM", "activity": "BASE: Definition of DQ checks + implementation", "deps": "44", "opt_effort": 5.0, "pes_effort": 10.0, "opt_duration": 5, "pes_duration": 10, "opt_start": "2026-09-18", "opt_end": "2026-09-25", "pes_start": "2026-11-20", "pes_end": "2026-12-04", "uses_both": false, "halved": false}, {"id": "46", "role": "ANA", "env": "NA", "layer": "BASE", "source": "ANACRM", "activity": "BASE: QG for BASE LDM of Customer related areas", "deps": "28", "opt_effort": 3.0, "pes_effort": 5.0, "opt_duration": 3, "pes_duration": 5, "opt_start": "2026-06-12", "opt_end": "2026-06-17", "pes_start": "2026-07-20", "pes_end": "2026-07-27", "uses_both": false, "halved": false}, {"id": "48a", "role": "ANA", "env": "NA", "layer": "BASE", "source": "ANACRM", "activity": "BASE: QG physical data model", "deps": "30", "opt_effort": 2.0, "pes_effort": 5.0, "opt_duration": 2, "pes_duration": 5, "opt_start": "2026-09-14", "opt_end": "2026-09-16", "pes_start": "2026-11-18", "pes_end": "2026-11-25", "uses_both": false, "halved": false}, {"id": "48b", "role": "BE", "env": "NA", "layer": "BASE", "source": "ANACRM", "activity": "BASE: QG physical data model", "deps": "30", "opt_effort": 3.0, "pes_effort": 5.0, "opt_duration": 3, "pes_duration": 5, "opt_start": "2026-09-17", "opt_end": "2026-09-22", "pes_start": "2026-11-20", "pes_end": "2026-11-27", "uses_both": false, "halved": false}, {"id": "49a", "role": "ANA", "env": "NA", "layer": "BASE", "source": "GRPDWH", "activity": "BASE: QG physical data model", "deps": "31", "opt_effort": 2.0, "pes_effort": 5.0, "opt_duration": 2, "pes_duration": 5, "opt_start": "2026-09-16", "opt_end": "2026-09-18", "pes_start": "2026-11-25", "pes_end": "2026-12-02", "uses_both": false, "halved": false}, {"id": "49b", "role": "BE", "env": "NA", "layer": "BASE", "source": "GRPDWH", "activity": "BASE: QG physical data model", "deps": "31", "opt_effort": 3.0, "pes_effort": 3.0, "opt_duration": 3, "pes_duration": 3, "opt_start": "2026-09-18", "opt_end": "2026-09-23", "pes_start": "2026-11-23", "pes_end": "2026-11-26", "uses_both": false, "halved": false}, {"id": "50", "role": "BE", "env": "PROD", "layer": "BASE", "source": "ANACRM", "activity": "BASE PROD Release + initial insert per TENANT(COUNTRY)", "deps": "49a, 49b", "opt_effort": 0.0, "pes_effort": 0.0, "opt_duration": 1, "pes_duration": 1, "opt_start": "2026-09-23", "opt_end": "2026-09-24", "pes_start": "2026-12-02", "pes_end": "2026-12-03", "uses_both": false, "halved": false}, {"id": "51", "role": "BE", "env": "PROD", "layer": "BASE", "source": "GRPDWH", "activity": "BASE PROD Release + initial insert per TENANT(COUNTRY)", "deps": "49a, 49b", "opt_effort": 5.0, "pes_effort": 5.0, "opt_duration": 5, "pes_duration": 5, "opt_start": "2026-09-23", "opt_end": "2026-09-30", "pes_start": "2026-12-02", "pes_end": "2026-12-09", "uses_both": false, "halved": false}, {"id": "52", "role": "ANA", "env": "PROD", "layer": "BASE", "source": "ANACRM", "activity": "BASE: DBX PROD data set validation per TENANT(COUNTRY)", "deps": "50, 51", "opt_effort": 5.0, "pes_effort": 5.0, "opt_duration": 3, "pes_duration": 3, "opt_start": "2026-09-30", "opt_end": "2026-10-05", "pes_start": "2026-12-09", "pes_end": "2026-12-14", "uses_both": true, "halved": true}, {"id": "53", "role": "ANA", "env": "PROD", "layer": "BASE", "source": "GRPDWH", "activity": "BASE: DBX PROD data set validation per TENANT(COUNTRY)", "deps": "50, 51", "opt_effort": 3.0, "pes_effort": 6.0, "opt_duration": 2, "pes_duration": 3, "opt_start": "2026-10-05", "opt_end": "2026-10-07", "pes_start": "2026-12-14", "pes_end": "2026-12-17", "uses_both": true, "halved": true}, {"id": "54a", "role": "ANA", "env": "NA", "layer": "NA", "source": "ANACRM", "activity": "DOCU: Creation of Functional Specification and description of solution", "deps": "52, 53", "opt_effort": 2.0, "pes_effort": 4.0, "opt_duration": 2, "pes_duration": 4, "opt_start": "2026-10-07", "opt_end": "2026-10-09", "pes_start": "2026-12-17", "pes_end": "2026-12-23", "uses_both": false, "halved": false}];
+
+const projectStart = new Date(2026, 2, 25); // March 25
+
+function parseDate(s) { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); }
+function fmt(d) { return d.getDate() + '.' + (d.getMonth()+1) + '.'; }
+function fmtFull(d) { return d.getDate() + '.' + (d.getMonth()+1) + '.' + d.getFullYear(); }
+function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
+function diffDays(a, b) { return Math.round((b - a) / 86400000); }
+function mondayOf(d) { const r = new Date(d); r.setDate(r.getDate() - ((r.getDay() + 6) % 7)); return r; }
+
+// Generate weeks
+const allEnds = DATA.map(d => parseDate(d.pes_end));
+const projectEnd = new Date(Math.max(...allEnds) + 14 * 86400000);
+const weeks = [];
+let w = mondayOf(projectStart);
+while (w <= projectEnd) {
+  weeks.push(new Date(w));
+  w = addDays(w, 7);
+}
+
+// Month spans
+const months = [];
+let curMonth = -1;
+weeks.forEach((wk, i) => {
+  const m = wk.getMonth();
+  if (m !== curMonth) {
+    months.push({ month: m, year: wk.getFullYear(), startIdx: i, span: 1 });
+    curMonth = m;
+  } else {
+    months[months.length - 1].span++;
+  }
+});
+const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// Summary cards
+const optEnd = new Date(Math.max(...DATA.map(d => parseDate(d.opt_end))));
+const pesEnd = new Date(Math.max(...DATA.map(d => parseDate(d.pes_end))));
+const totalOptEffort = DATA.reduce((s, d) => s + d.opt_effort, 0);
+const totalPesEffort = DATA.reduce((s, d) => s + d.pes_effort, 0);
+
+document.getElementById('summaryCards').innerHTML = `
+  <div class="summary-card"><div class="label">Start</div><div class="value">25.3.2026</div></div>
+  <div class="summary-card"><div class="label">Optimistic End</div><div class="value green">${fmtFull(optEnd)}</div></div>
+  <div class="summary-card"><div class="label">Pessimistic End</div><div class="value orange">${fmtFull(pesEnd)}</div></div>
+  <div class="summary-card"><div class="label">Effort Range</div><div class="value">${totalOptEffort}–${totalPesEffort} MD</div></div>
+  <div class="summary-card"><div class="label">Team</div><div class="value" style="font-size:14px">2 ANA + 2 BE</div></div>
+`;
+
+// Build table
+function render(filterRole='all', filterLayer='all', filterSource='all') {
+  const thead = document.querySelector('#ganttTable thead');
+  const tbody = document.querySelector('#ganttTable tbody');
+  
+  // Header row 1: months
+  let h1 = '<tr><th class="task-col month-header" rowspan="2">ID</th><th class="task-col month-header" rowspan="2">Role</th><th class="task-col month-header" rowspan="2">Lyr</th><th class="task-col month-header" rowspan="2">Src</th><th class="activity-col month-header" rowspan="2">Activity</th><th class="task-col month-header" rowspan="2">Dur<br>O/P</th>';
+  months.forEach(m => {
+    h1 += `<th class="month-header" colspan="${m.span}">${monthNames[m.month]} ${m.year}</th>`;
+  });
+  h1 += '</tr>';
+  
+  // Header row 2: weeks
+  let h2 = '<tr>';
+  weeks.forEach(wk => {
+    h2 += `<th class="week-header">${fmt(wk)}</th>`;
+  });
+  h2 += '</tr>';
+  thead.innerHTML = h1 + h2;
+  
+  // Filter data
+  let filtered = DATA.filter(d => {
+    if (filterRole !== 'all' && d.role !== filterRole) return false;
+    if (filterLayer !== 'all' && d.layer !== filterLayer) return false;
+    if (filterSource !== 'all' && d.source !== filterSource) return false;
+    return true;
+  });
+  
+  let prevLayer = '';
+  let rows = '';
+  filtered.forEach(d => {
+    const isSep = d.layer !== prevLayer && prevLayer !== '';
+    prevLayer = d.layer;
+    
+    const optS = parseDate(d.opt_start);
+    const optE = parseDate(d.opt_end);
+    const pesS = parseDate(d.pes_start);
+    const pesE = parseDate(d.pes_end);
+    
+    const roleCls = d.role === 'ANA' ? 'ana' : 'be';
+    rows += `<tr class="${isSep ? 'phase-separator' : ''}" data-id="${d.id}">`;
+    rows += `<td class="id-cell">${d.id}</td>`;
+    rows += `<td class="role-cell ${roleCls}">${d.role}</td>`;
+    rows += `<td style="text-align:center;font-size:10px">${d.layer}</td>`;
+    rows += `<td style="text-align:center;font-size:10px">${d.source}</td>`;
+    rows += `<td class="activity-cell">${d.activity}</td>`;
+    rows += `<td class="dur-cell">${d.opt_duration}/${d.pes_duration}</td>`;
+    
+    weeks.forEach((wk, wi) => {
+      const wkEnd = addDays(wk, 6);
+      const inOpt = optS <= wkEnd && optE >= wk;
+      const inPes = pesS <= wkEnd && pesE >= wk;
+      
+      let bars = '';
+      if (inPes) {
+        // Calculate bar position within the cell
+        const cellStart = wk;
+        const cellEnd = addDays(wk, 7);
+        
+        const pesBarStart = Math.max(0, diffDays(cellStart, pesS)) / 7 * 100;
+        const pesBarEnd = Math.min(7, diffDays(cellStart, pesE) + 1) / 7 * 100;
+        bars += `<div class="bar pes" style="left:${pesBarStart}%;width:${pesBarEnd - pesBarStart}%"></div>`;
+      }
+      if (inOpt) {
+        const cellStart = wk;
+        const optBarStart = Math.max(0, diffDays(cellStart, optS)) / 7 * 100;
+        const optBarEnd = Math.min(7, diffDays(cellStart, optE) + 1) / 7 * 100;
+        bars += `<div class="bar opt" style="left:${optBarStart}%;width:${optBarEnd - optBarStart}%"></div>`;
+      }
+      
+      rows += `<td class="gantt-cell">${bars}</td>`;
+    });
+    rows += '</tr>';
+  });
+  
+  tbody.innerHTML = rows;
+  
+  // Tooltips
+  tbody.querySelectorAll('tr').forEach(tr => {
+    const id = tr.dataset.id;
+    const d = DATA.find(x => x.id === id);
+    if (!d) return;
+    tr.addEventListener('mouseenter', e => {
+      const tt = document.getElementById('tooltip');
+      let note = '';
+      if (d.halved) note = '⚡ Halved (2 workers)';
+      else if (d.id === '28') note = '⚡ 70:30 split';
+      tt.innerHTML = `<b>[${d.id}] ${d.activity}</b><br>
+        Role: ${d.role} · Layer: ${d.layer} · Source: ${d.source}<br>
+        Effort: ${d.opt_effort}–${d.pes_effort} MD · Duration: ${d.opt_duration}–${d.pes_duration} days<br>
+        Opt: ${fmtFull(parseDate(d.opt_start))} → ${fmtFull(parseDate(d.opt_end))}<br>
+        Pes: ${fmtFull(parseDate(d.pes_start))} → ${fmtFull(parseDate(d.pes_end))}<br>
+        Deps: ${d.deps}${note ? '<br>' + note : ''}`;
+      tt.style.display = 'block';
+    });
+    tr.addEventListener('mousemove', e => {
+      const tt = document.getElementById('tooltip');
+      tt.style.left = (e.clientX + 12) + 'px';
+      tt.style.top = (e.clientY + 12) + 'px';
+    });
+    tr.addEventListener('mouseleave', () => {
+      document.getElementById('tooltip').style.display = 'none';
+    });
+  });
+}
+
+// Filter buttons
+document.querySelectorAll('.btn[data-filter]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.btn[data-filter]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    applyFilters();
+  });
+});
+document.querySelectorAll('.btn[data-layer]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.btn[data-layer]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    applyFilters();
+  });
+});
+document.querySelectorAll('.btn[data-source]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.btn[data-source]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    applyFilters();
+  });
+});
+
+function applyFilters() {
+  const role = document.querySelector('.btn[data-filter].active').dataset.filter;
+  const layer = document.querySelector('.btn[data-layer].active').dataset.layer;
+  const source = document.querySelector('.btn[data-source].active').dataset.source;
+  render(role, layer, source);
+}
+
+render();
+</script>
+</body>
+</html>
