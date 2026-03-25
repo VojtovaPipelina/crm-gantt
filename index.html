@@ -52,7 +52,7 @@ table { border-collapse: collapse; min-width: 100%; }
 thead th { position: sticky; top: 0; z-index: 10; font-size: 10px; font-weight: 600; padding: 6px 3px; text-align: center; white-space: nowrap; }
 th.hdr1 { background: var(--primary-dark); color: #fff; overflow: hidden; font-size: 11px; letter-spacing: 0.5px; }
 th.hdr2 { background: var(--primary); color: #fff; font-size: 9px; width: 24px; min-width: 24px; max-width: 24px; }
-th.fixed { text-align: left; min-width: 40px; }
+th.fixed { text-align: center; min-width: 40px; }
 th.act { text-align: left; min-width: 250px; }
 
 tbody tr { transition: background .15s; }
@@ -60,6 +60,18 @@ tbody tr:hover { background: #f0f4ff !important; }
 
 td { padding: 3px 4px; font-size: 10px; border-bottom: 1px solid #eee; vertical-align: middle; }
 td.id { font-weight: 700; text-align: center; color: var(--primary); }
+td.id.current-enabled {
+  background: #dff5e8;
+  color: #166534;
+  box-shadow: inset 0 0 0 1px #86efac;
+  border-radius: 4px;
+}
+td.id.predecessor-highlight {
+  background: #fde2e2;
+  color: #b91c1c;
+  box-shadow: inset 0 0 0 1px #fca5a5;
+  border-radius: 4px;
+}
 td.role { text-align: center; font-weight: 600; font-size: 9px; padding: 2px 6px; border-radius: 3px; }
 td.role.ana { background: var(--anacrm-light); color: var(--anacrm); }
 td.role.be { background: var(--grpdwh-light); color: var(--grpdwh); }
@@ -194,6 +206,41 @@ function updateSummary(vis) {
   document.getElementById('summary-average').textContent = `${fmtMd(avgMd)} MD`;
 }
 
+
+function clearDependencyHighlights() {
+  document.querySelectorAll('td.id.current-enabled, td.id.predecessor-highlight').forEach(cell => {
+    cell.classList.remove('current-enabled', 'predecessor-highlight');
+  });
+}
+
+function getDependencyIds(depString) {
+  if(!depString) return [];
+  return depString
+    .split(/[;,]+/)
+    .map(x => x.trim())
+    .filter(Boolean);
+}
+
+function highlightDependencyChain(currentId, depString) {
+  clearDependencyHighlights();
+
+  getDependencyIds(depString).forEach(depId => {
+    const depRow = document.querySelector(`#gt tbody tr[data-id="${depId}"] td.id`);
+    if(depRow) depRow.classList.add('predecessor-highlight');
+  });
+
+  document.querySelectorAll('#gt tbody tr[data-id]').forEach(tr => {
+    const rowId = tr.dataset.id;
+    const rowTask = TASKS.find(x => x.id === rowId);
+    if(!rowTask) return;
+    const rowDeps = getDependencyIds(rowTask.deps);
+    if(rowDeps.includes(currentId)) {
+      const enabledCell = tr.querySelector('td.id');
+      if(enabledCell) enabledCell.classList.add('current-enabled');
+    }
+  });
+}
+
 function render() {
   const thead = document.querySelector('#gt thead');
   const tbody = document.querySelector('#gt tbody');
@@ -287,11 +334,15 @@ function render() {
         Dependencies: ${t.deps||'–'}`;
       tip.style.display='block';
       positionTooltip(e);
+      highlightDependencyChain(t.id, t.deps);
     });
     tr.addEventListener('mousemove', e => {
       positionTooltip(e);
     });
-    tr.addEventListener('mouseleave', ()=>document.getElementById('tip').style.display='none');
+    tr.addEventListener('mouseleave', ()=>{
+      document.getElementById('tip').style.display='none';
+      clearDependencyHighlights();
+    });
   });
 }
 
