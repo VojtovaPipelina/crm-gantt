@@ -10,7 +10,7 @@ The goal was to create a fast, portable, and easily deployable solution for shar
 
 🚀 Live Demo
 
-👉 https://vojtovapipelina.github.io/crm_gantt/
+👉 https://vojtovapipelina.github.io/crm-gantt/
 
 🛠️ Tech Stack
 HTML5
