@@ -5,7 +5,8 @@ Manages versioned changelog workflow for the CRM Gantt project.
 ## Usage
 
 - `/changelog start` — begin a new version: determine next version number, create feature branch, inform the user
-- `/changelog` — finalize current version: document all changes made on the current branch into `CHANGELOG.md`
+- `/changelog` — document changes on the current branch into `CHANGELOG.md` (can be run multiple times)
+- `/changelog finish` — finalize the version: update `CHANGELOG.md`, commit, push, and open a PR to main
 
 ---
 
