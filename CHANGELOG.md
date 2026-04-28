@@ -1,5 +1,29 @@
 # Changelog – CRM Gantt
 
+## v3 – 2026-04-28
+
+### WAIT-CRM task visual refinements
+Follow-up polish on the WAIT-CRM blocker task added in v2.
+
+| Field | Old value | New value |
+|-------|-----------|-----------|
+| `source` | `"WAIT"` | `"ANACRM"` |
+| Activity cell style | plain | red background `#fdecea`, red left border (`--waiting-bar`), bold — same pattern as Critical rows |
+| Bar color detection | `t.source === 'WAIT'` | `t.id === 'WAIT-CRM'` (source change required new detection) |
+
+### Calendar columns extended
+After the +5 week shift, tasks 50–53 land in October 2026 but the hardcoded `WEEKS` array ended at `2026-09-28`.
+
+| Added weeks |
+|-------------|
+| `2026-10-05` |
+| `2026-10-12` |
+
+### Estimated End — dynamic calculation
+`summary-end` card was hardcoded. Now computed in `updateSummary()` from the latest `x_weeks` date across all visible tasks (+6 days to show end of that week). Responds to role/layer/source filters automatically.
+
+---
+
 ## v2 – 2026-04-28
 
 ### Schedule shift: ANACRM tasks +5 weeks
